@@ -7,6 +7,7 @@ from datetime import datetime, timezone, timedelta
 import html
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
+import re
 
 BASE_URL = "https://www.takemachelin.com"
 LIST_URLS = [
@@ -23,26 +24,27 @@ def format_rfc822_from_datetime(dt):
     return dt.strftime("%a, %d %b %Y %H:%M:%S %z")
 
 
+def extract_pubdate_from_url(url):
+    # 例: http://www.takemachelin.com/2018/05/lolitacomplex.html
+    m = re.search(r"takemachelin\.com/(\d{4})/(\d{2})/", url)
+    if m:
+        year, month = m.group(1), m.group(2)
+        # 日付は月の1日・日本時間12:00で固定
+        dt = datetime(
+            int(year), int(month), 1, 12, 0, 0, tzinfo=timezone(timedelta(hours=9))
+        )
+        return format_rfc822_from_datetime(dt)
+    return ""
+
+
 def fetch_article(a_tag):
     title = html.escape(a_tag.get_text(strip=True))
     link = a_tag.get("href")
     if not link or not link.startswith("http"):
         link = BASE_URL + link
 
-    try:
-        res = requests.get(link, timeout=10)
-        soup = BeautifulSoup(res.text, "html.parser")
-        meta_tag = soup.find("meta", {"property": "article:published_time"})
-        if meta_tag and meta_tag.get("content"):
-            dt = datetime.fromisoformat(meta_tag["content"].replace("Z", "+09:00"))
-        else:
-            time_tag = soup.find("time", {"datetime": True})
-            if time_tag:
-                dt = datetime.fromisoformat(time_tag["datetime"].replace("Z", "+09:00"))
-            else:
-                return None
-        pubDate = format_rfc822_from_datetime(dt)
-    except Exception:
+    pubDate = extract_pubdate_from_url(link)
+    if not pubDate:
         return None
 
     return {
@@ -64,7 +66,10 @@ for url in LIST_URLS:
     a_tags = [
         a
         for a in soup.find_all("a", href=True)
-        if a["href"].startswith("https://www.takemachelin.com/20")
+        if (
+            a["href"].startswith("http://www.takemachelin.com/20")
+            or a["href"].startswith("https://www.takemachelin.com/20")
+        )
     ]
 
     print(f"  {len(a_tags)}件の記事リンクを検出")
