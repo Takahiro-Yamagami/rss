@@ -11,17 +11,19 @@ import html
 BASE_URL = "https://chikirin.hatenablog.com"
 PAGE_URL = BASE_URL + "/archive?page={}"
 
+
 def extract_pubdate(link):
     # パターン1: /entry/YYYY/MM/DD/...
-    m = re.search(r'/entry/(\d{4})/(\d{2})/(\d{2})/', link)
+    m = re.search(r"/entry/(\d{4})/(\d{2})/(\d{2})/", link)
     if m:
         return f"{m.group(1)}/{m.group(2)}/{m.group(3)}"
     # パターン2: /entry/YYYYMMDD
-    m = re.search(r'/entry/(\d{4})(\d{2})(\d{2})$', link)
+    m = re.search(r"/entry/(\d{4})(\d{2})(\d{2})$", link)
     if m:
         return f"{m.group(1)}/{m.group(2)}/{m.group(3)}"
     # 該当しない場合は空欄
     return ""
+
 
 def fetch_article(a):
     title = html.escape(a.get_text(strip=True))
@@ -36,6 +38,7 @@ def fetch_article(a):
         "link": link,
         "pubDate": pubDate,
     }
+
 
 articles = []
 page = 1
