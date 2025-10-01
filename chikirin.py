@@ -7,12 +7,21 @@ import time
 import re
 from concurrent.futures import ThreadPoolExecutor
 import html
-from email.utils import format_datetime
-from datetime import datetime, timezone, timedelta
 
 BASE_URL = "https://chikirin.hatenablog.com"
 PAGE_URL = BASE_URL + "/archive?page={}"
 
+def extract_pubdate(link):
+    # パターン1: /entry/YYYY/MM/DD/...
+    m = re.search(r'/entry/(\d{4})/(\d{2})/(\d{2})/', link)
+    if m:
+        return f"{m.group(1)}/{m.group(2)}/{m.group(3)}"
+    # パターン2: /entry/YYYYMMDD
+    m = re.search(r'/entry/(\d{4})(\d{2})(\d{2})$', link)
+    if m:
+        return f"{m.group(1)}/{m.group(2)}/{m.group(3)}"
+    # 該当しない場合は空欄
+    return ""
 
 def fetch_article(a):
     title = html.escape(a.get_text(strip=True))
@@ -20,34 +29,13 @@ def fetch_article(a):
     if not link.startswith("http"):
         link = BASE_URL + link
 
-    detail_res = requests.get(link)
-    detail_soup = BeautifulSoup(detail_res.text, "html.parser")
-    desc_tag = detail_soup.select_one(".entry-content")
-    description = html.escape(desc_tag.get_text(strip=True)[:100]) if desc_tag else ""
-
-    m = re.search(r"/entry/(\d{4})/(\d{2})/(\d{2})/(\d{6})", link)
-    if m:
-        year, month, day, time_str = m.groups()
-        dt = datetime(
-            int(year),
-            int(month),
-            int(day),
-            int(time_str[:2]),
-            int(time_str[2:4]),
-            int(time_str[4:6]),
-            tzinfo=timezone(timedelta(hours=9)),
-        )
-        pubDate = format_datetime(dt)
-    else:
-        pubDate = ""
+    pubDate = extract_pubdate(link)
 
     return {
         "title": title,
         "link": link,
-        "description": description,
         "pubDate": pubDate,
     }
-
 
 articles = []
 page = 1
@@ -62,7 +50,7 @@ while True:
     if not entry_list:
         break
 
-    # 並列で記事詳細を取得
+    # 並列で記事詳細を取得（description取得しないので高速化）
     with ThreadPoolExecutor(max_workers=8) as executor:
         results = list(executor.map(fetch_article, entry_list))
         articles.extend(results)
@@ -79,7 +67,6 @@ for article in articles:
         f"""  <item>
     <title>{article['title']}</title>
     <link>{article['link']}</link>
-    <description>{article['description']}</description>
     <pubDate>{article['pubDate']}</pubDate>
   </item>
 """
