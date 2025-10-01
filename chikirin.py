@@ -7,6 +7,7 @@ import time
 import re
 from concurrent.futures import ThreadPoolExecutor
 import html
+from datetime import datetime, timezone, timedelta
 
 BASE_URL = "https://chikirin.hatenablog.com"
 PAGE_URL = BASE_URL + "/archive?page={}"
@@ -64,13 +65,25 @@ while True:
 # pubDateで降順ソート
 articles.sort(key=lambda x: x["pubDate"], reverse=True)
 
+
+def format_rfc822(dt):
+    # dt: datetimeオブジェクト
+    # タイムゾーンがなければ日本時間を付与
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone(timedelta(hours=9)))
+    return dt.strftime("%a, %d %b %Y %H:%M:%S %z")
+
+
 rss_items = []
 for article in articles:
+    # 例: entry['date'] が '2024-06-10 12:34:56' の場合
+    dt = datetime.strptime(article["pubDate"], "%Y/%m/%d")
+    pub_date = format_rfc822(dt)
     rss_items.append(
         f"""  <item>
     <title>{article['title']}</title>
     <link>{article['link']}</link>
-    <pubDate>{article['pubDate']}</pubDate>
+    <pubDate>{pub_date}</pubDate>
   </item>
 """
     )
