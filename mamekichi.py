@@ -4,42 +4,41 @@
 import requests
 from bs4 import BeautifulSoup
 import time
-from concurrent.futures import ThreadPoolExecutor
-import html
 from datetime import datetime, timezone, timedelta
+import html
+from concurrent.futures import ThreadPoolExecutor
 
-BASE_URL = "https://mamekichimameko.blog.jp/"
-PAGE_URL = BASE_URL + "/archive?page={}"
-
-
-def extract_pubdate(article_soup):
-    # .article-date クラスから日付テキストを取得
-    date_tag = article_soup.select_one(".article-date")
-    if date_tag:
-        date_str = date_tag.get_text(strip=True)
-        try:
-            # 例: 2024年6月10日 → "2024/06/10"
-            dt = datetime.strptime(date_str, "%Y年%m月%d日")
-            dt = dt.replace(
-                hour=12, minute=0, second=0, tzinfo=timezone(timedelta(hours=9))
-            )
-            return dt.strftime("%a, %d %b %Y %H:%M:%S %z")
-        except Exception:
-            return ""
-    return ""
+BASE_URL = "https://mamekichimameko.blog.jp"
+ARCHIVE_URL = BASE_URL + "/archives/{year}-{month:02d}.html"
 
 
-def fetch_article(a):
-    title = html.escape(a.get_text(strip=True))
-    link = a["href"]
+def format_rfc822_from_str(date_str):
+    # date_str: "YYYY/MM/DD"
+    try:
+        dt = datetime.strptime(date_str, "%Y/%m/%d")
+        dt = dt.replace(
+            hour=12, minute=0, second=0, tzinfo=timezone(timedelta(hours=9))
+        )
+        return dt.strftime("%a, %d %b %Y %H:%M:%S %z")
+    except Exception:
+        return ""
+
+
+def fetch_article(entry):
+    # タイトルとリンク
+    a_tag = entry.select_one('a[itemprop="url"]')
+    if not a_tag:
+        return None
+    title = html.escape(a_tag.get_text(strip=True))
+    link = a_tag["href"]
     if not link.startswith("http"):
         link = BASE_URL + link
-
-    # 記事詳細ページからpubDate取得
-    res = requests.get(link)
-    soup = BeautifulSoup(res.text, "html.parser")
-    pubDate = extract_pubdate(soup)
-
+    # 日付
+    time_tag = entry.select_one('time[itemprop="datePublished"]')
+    if not time_tag:
+        return None
+    date_str = time_tag.get_text(strip=True)
+    pubDate = format_rfc822_from_str(date_str)
     return {
         "title": title,
         "link": link,
@@ -47,26 +46,35 @@ def fetch_article(a):
     }
 
 
+def fetch_monthly_articles(year, month):
+    articles = []
+    page = 1
+    while True:
+        if page == 1:
+            url = f"{BASE_URL}/archives/{year}-{month:02d}.html"
+        else:
+            url = f"{BASE_URL}/archives/{year}-{month:02d}.html?p={page}"
+        print(f"Fetching: {url}")
+        res = requests.get(url)
+        if res.status_code != 200:
+            break
+        soup = BeautifulSoup(res.text, "html.parser")
+        entry_list = soup.select("article.article")
+        if not entry_list:
+            break
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            results = list(filter(None, executor.map(fetch_article, entry_list)))
+            articles.extend(results)
+        page += 1
+        time.sleep(0.05)
+    return articles
+
+
 articles = []
-page = 1
-while True:
-    url = PAGE_URL.format(page)
-    print(f"Fetching: {url}")
-    res = requests.get(url)
-    if res.status_code != 200:
-        break
-    soup = BeautifulSoup(res.text, "html.parser")
-    entry_list = soup.select(".entry-title-link")
-    if not entry_list:
-        break
-
-    # 並列で記事詳細を取得
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        results = list(executor.map(fetch_article, entry_list))
-        articles.extend(results)
-
-    page += 1
-    time.sleep(0.05)  # サーバー負荷軽減
+# 2015年分だけ取得
+year = 2015
+for month in range(1, 13):
+    articles.extend(fetch_monthly_articles(year, month))
 
 # pubDateで降順ソート
 articles.sort(key=lambda x: x["pubDate"], reverse=True)
