@@ -74,11 +74,21 @@ def format_rfc822(dt):
     return dt.strftime("%a, %d %b %Y %H:%M:%S %z")
 
 
+def format_rfc822_from_str(date_str):
+    # date_str: "YYYY/MM/DD" 形式
+    try:
+        dt = datetime.strptime(date_str, "%Y/%m/%d")
+        dt = dt.replace(
+            hour=12, minute=0, second=0, tzinfo=timezone(timedelta(hours=9))
+        )
+        return dt.strftime("%a, %d %b %Y %H:%M:%S %z")
+    except Exception:
+        return ""
+
+
 rss_items = []
 for article in articles:
-    # 例: entry['date'] が '2024-06-10 12:34:56' の場合
-    dt = datetime.strptime(article["pubDate"], "%Y/%m/%d")
-    pub_date = format_rfc822(dt)
+    pub_date = format_rfc822_from_str(article["pubDate"])
     rss_items.append(
         f"""  <item>
     <title>{article['title']}</title>
