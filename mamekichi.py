@@ -71,10 +71,13 @@ def fetch_monthly_articles(year, month):
 
 
 articles = []
-# 2015年分だけ取得
-year = 2015
-for month in range(1, 13):
-    articles.extend(fetch_monthly_articles(year, month))
+# 2015年から現在まで全年度・全月を取得
+for year in range(2015, datetime.now().year + 1):
+    for month in range(1, 13):
+        # 未来の月はスキップ
+        if year == datetime.now().year and month > datetime.now().month:
+            continue
+        articles.extend(fetch_monthly_articles(year, month))
 
 # pubDateで降順ソート
 articles.sort(key=lambda x: x["pubDate"], reverse=True)
